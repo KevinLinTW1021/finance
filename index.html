@@ -459,6 +459,128 @@
   }
   body.modal-open { overflow: hidden; }
 
+  /* ---------- Annual fee reminder & list ---------- */
+  .annual-reminder {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 12px;
+    padding: 10px 16px;
+    margin: -8px 0 16px;
+    font-size: 13px;
+    color: #78350f;
+    line-height: 1.6;
+  }
+  .annual-reminder[hidden] { display: none; }
+  .annual-reminder-icon { font-size: 16px; }
+  .annual-reminder strong { color: #92400e; font-weight: 600; }
+  .annual-reminder-edit {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid #fde68a;
+    color: #92400e;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .annual-reminder-edit:hover { background: #fef3c7; }
+
+  .annual-col-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) 90px 130px 32px;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--muted);
+    padding: 4px 6px;
+    margin-bottom: 4px;
+    margin-top: 8px;
+    letter-spacing: 0.05em;
+  }
+  .annual-col-header > span { padding: 0 4px; }
+  .annual-col-header .right { text-align: right; }
+
+  #annualList { display: flex; flex-direction: column; gap: 6px; }
+
+  .annual-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) 90px 130px 32px;
+    gap: 8px;
+    align-items: center;
+  }
+  .annual-row .lbl,
+  .annual-row .val,
+  .annual-row .mon {
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--ink);
+    background: #fafafa;
+    width: 100%;
+    transition: border-color 0.1s, background 0.1s, box-shadow 0.1s;
+  }
+  .annual-row .val { text-align: right; font-variant-numeric: tabular-nums; }
+  .annual-row .val::-webkit-outer-spin-button,
+  .annual-row .val::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .annual-row .lbl:focus,
+  .annual-row .val:focus,
+  .annual-row .mon:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(184, 134, 11, 0.15);
+  }
+  .annual-row .del {
+    appearance: none;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #cbd5e1;
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+  }
+  .annual-row .del:hover {
+    background: #fef2f2; color: var(--expense); border-color: #fecaca;
+  }
+  .annual-empty {
+    padding: 24px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    border: 1px dashed var(--line-strong);
+    border-radius: 8px;
+    margin: 4px 0;
+  }
+
+  .annual-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    margin-top: 16px;
+    background: var(--accent-soft);
+    border: 1px solid #f3e8b8;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .annual-summary .v {
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    font-size: 18px;
+  }
+
   /* ---------- Print ---------- */
   @media print {
     @page { size: A4; margin: 12mm; }
@@ -497,6 +619,7 @@
     <span class="grow">個人財務報表</span>
     <span class="save-status" id="saveStatus">已自動暫存</span>
     <button class="btn" id="btnHelp" title="使用說明">？ 說明</button>
+    <button class="btn" id="btnAnnual" title="記錄每年固定要繳的費用">📌 年度費用</button>
     <button class="btn" id="btnLoadJson">載入 JSON</button>
     <button class="btn" id="btnSaveJson">下載 JSON</button>
     <button class="btn" id="btnExportXlsx">匯出 Excel</button>
@@ -518,6 +641,13 @@
   <div class="tabs no-print" id="tabs"></div>
 
   <div class="month-banner">目前月份：<strong id="currentMonthLabel">—</strong></div>
+
+  <div class="annual-reminder no-print" id="annualReminder" hidden>
+    <span class="annual-reminder-icon">📌</span>
+    <strong>本月年度費用提醒：</strong>
+    <span id="annualReminderText"></span>
+    <button type="button" class="annual-reminder-edit" id="annualReminderEdit">編輯</button>
+  </div>
 
   <div class="grid">
 
@@ -632,6 +762,14 @@
       <li>分頁右上的 <code>×</code> 刪除整個月份（會二次確認）</li>
     </ul>
 
+    <h3>年度費用註記</h3>
+    <ul>
+      <li>右上「<strong>📌 年度費用</strong>」按鈕可記錄每年固定要繳的費用（車險、稅金、年費⋯⋯），填名稱 / 月份 / 金額</li>
+      <li>切到對應月份時，主頁會出現黃色提醒條，讓你別忘了把這筆加到當月支出</li>
+      <li>金額不會自動加進每月支出，只是純提醒清單</li>
+      <li>匯出 Excel 會多出一個「年度費用」分頁列出所有項目與年度總計</li>
+    </ul>
+
     <div class="modal-callout">
       <strong>⚠️ 重要：定期備份你的資料</strong><br />
       你的資料只存在這個瀏覽器。<strong>清除瀏覽器資料、換瀏覽器、換裝置、換電腦</strong>都會看不到。
@@ -671,6 +809,34 @@
 
     <div class="modal-footer">
       <button class="btn btn-primary" id="modalGotItBtn">我知道了</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 年度費用 Modal ========== -->
+<div class="modal-overlay no-print" id="annualModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="annualModalTitle">
+    <button class="modal-close" id="annualCloseBtn" aria-label="關閉">×</button>
+    <h2 id="annualModalTitle">📌 年度費用註記</h2>
+    <p>記錄每年固定要繳的費用（車險、稅金、年費、會員費⋯⋯）。當你切換到對應月份時，主頁會自動顯示提醒。<br />
+    <strong>注意</strong>：這只是「提醒清單」，金額不會自動加進每月支出，要列入哪個月份還是自己填到該月「支出」裡。</p>
+
+    <div class="annual-col-header">
+      <span>名稱</span>
+      <span>月份</span>
+      <span class="right">金額</span>
+      <span></span>
+    </div>
+    <div id="annualList"></div>
+    <button class="add-btn" data-add="annual">＋ 新增年度費用</button>
+
+    <div class="annual-summary">
+      <span>年度總計（一年共要繳）</span>
+      <span class="v" id="annualTotal">0</span>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="annualDoneBtn">完成</button>
     </div>
   </div>
 </div>
@@ -744,7 +910,10 @@ function freshMonth(label) {
 }
 function freshState() {
   const m = freshMonth(todayYYYYMM());
-  return { meta: { name: "" }, months: [m], activeMonthId: m.id };
+  return { meta: { name: "" }, months: [m], activeMonthId: m.id, annualNotes: [] };
+}
+function makeAnnualId() {
+  return "an_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
 let state = freshState();
@@ -862,6 +1031,7 @@ function renderAll() {
   SECTIONS.forEach(renderSection);
   renderStocks();
   recalc();
+  updateAnnualReminder();
 }
 
 // ---------- Recalc ----------
@@ -932,6 +1102,7 @@ function normalizeImported(parsed) {
       meta: { name: parsed.meta?.name || "" },
       months,
       activeMonthId: activeId,
+      annualNotes: Array.isArray(parsed.annualNotes) ? parsed.annualNotes : [],
     };
   }
   // v2 (single month) — migrate
@@ -949,6 +1120,7 @@ function normalizeImported(parsed) {
       meta: { name: parsed.meta?.name || "" },
       months: [m],
       activeMonthId: m.id,
+      annualNotes: [],
     };
   }
   return null;
@@ -1034,6 +1206,7 @@ document.addEventListener("click", e => {
   const add = e.target.closest("[data-add]");
   if (add) {
     const section = add.dataset.add;
+    if (section === "annual") return; // handled by annual-modal handler
     const m = currentMonth();
     if (section === "stocks") {
       if (!Array.isArray(m.stocks)) m.stocks = [];
@@ -1573,6 +1746,66 @@ function buildSummarySheet() {
   return ws;
 }
 
+function buildAnnualSheet() {
+  const notes = (Array.isArray(state.annualNotes) ? state.annualNotes : [])
+    .filter(n => n.name || numOf(n.amount) > 0);
+  if (notes.length === 0) return null;
+
+  const sorted = notes.slice().sort((a, b) => Number(a.month) - Number(b.month));
+  const total = sorted.reduce((acc, n) => acc + numOf(n.amount), 0);
+
+  const N = 3;
+  const rows = [];
+  const merges = [];
+  const heights = [];
+  const pushRow = (cells, h) => { rows.push(cells); if (h) heights[rows.length - 1] = h; };
+  const mergeRow = (style, value) => {
+    const arr = [tx(value, style)];
+    for (let i = 1; i < N; i++) arr.push(blank(style));
+    return arr;
+  };
+  const addMerge = (r, c1, c2) => merges.push({ s: { r, c: c1 }, e: { r, c: c2 } });
+
+  pushRow(mergeRow(S.title, "個 人 財 務 報 表    —    年 度 費 用 註 記"), 32);
+  addMerge(0, 0, N - 1);
+
+  pushRow([], 8);
+
+  pushRow([tx("姓名", S.metaLabel), tx(state.meta.name || "", S.metaValue), blank(S.metaValue)], 22);
+  addMerge(rows.length - 1, 1, N - 1);
+
+  pushRow([], 14);
+
+  pushRow([
+    tx("月份", S.sumHeader),
+    tx("名稱", S.sumHeader),
+    tx("金額", S.sumHeader),
+  ], 24);
+
+  sorted.forEach((n, idx) => {
+    const z = idx % 2 === 1;
+    pushRow([
+      tx(`${Number(n.month) || "?"} 月`, z ? S.sumMonthZebra : S.sumMonth),
+      tx(n.name || "（未命名）", z ? S.itemLabelZebra : S.itemLabel),
+      nm(n.amount, z ? S.itemValueZebra : S.itemValue),
+    ], 20);
+  });
+
+  pushRow([], 6);
+  pushRow([
+    tx("年度總計", S.totalLabel),
+    blank(S.totalLabel),
+    nm(total, S.totalValue),
+  ], 24);
+  addMerge(rows.length - 1, 0, 1);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [{ wch: 12 }, { wch: 32 }, { wch: 18 }];
+  ws["!merges"] = merges;
+  ws["!rows"] = heights.map(h => h ? { hpt: h } : null);
+  return ws;
+}
+
 $("#btnExportXlsx").addEventListener("click", () => {
   const wb = XLSX.utils.book_new();
   wb.Props = {
@@ -1587,6 +1820,10 @@ $("#btnExportXlsx").addEventListener("click", () => {
   state.months.forEach(m => {
     XLSX.utils.book_append_sheet(wb, buildMonthSheet(m, state.meta.name), sanitizeSheetName(m.label, usedSheetNames));
   });
+  const annualSheet = buildAnnualSheet();
+  if (annualSheet) {
+    XLSX.utils.book_append_sheet(wb, annualSheet, sanitizeSheetName("年度費用", usedSheetNames));
+  }
 
   const name = safeName(state.meta.name);
   XLSX.writeFile(wb, `個人財務_${name}_${state.months.length}月.xlsx`);
@@ -1824,6 +2061,147 @@ document.addEventListener("dblclick", e => {
   if (tab) startRename(tab);
 });
 
+// ---------- Annual fee notes ----------
+function getCurrentMonthNumber() {
+  const m = currentMonth();
+  if (!m || !m.label) return null;
+  const match = String(m.label).match(/^\d{4}-(\d{1,2})\b/);
+  if (!match) return null;
+  return parseInt(match[1], 10);
+}
+
+function renderAnnualList() {
+  const list = $("#annualList");
+  if (!list) return;
+  if (!Array.isArray(state.annualNotes)) state.annualNotes = [];
+  list.innerHTML = "";
+  if (state.annualNotes.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "annual-empty";
+    empty.textContent = "尚未新增任何年度費用，按下方按鈕加一筆";
+    list.appendChild(empty);
+  } else {
+    state.annualNotes.forEach((it) => {
+      const row = document.createElement("div");
+      row.className = "annual-row";
+      row.dataset.id = it.id;
+      const monthOpts = Array.from({ length: 12 }, (_, i) => {
+        const v = i + 1;
+        return `<option value="${v}"${Number(it.month) === v ? " selected" : ""}>${v} 月</option>`;
+      }).join("");
+      row.innerHTML = `
+        <input type="text" class="lbl" placeholder="費用名稱（例如：車險）" />
+        <select class="mon">${monthOpts}</select>
+        <input type="number" class="val" placeholder="金額" inputmode="decimal" step="any" />
+        <button type="button" class="del" title="刪除這筆">×</button>
+      `;
+      row.querySelector(".lbl").value = it.name || "";
+      row.querySelector(".val").value = it.amount || "";
+      list.appendChild(row);
+    });
+  }
+  updateAnnualTotal();
+}
+
+function updateAnnualTotal() {
+  const total = (state.annualNotes || []).reduce((acc, n) => acc + numOf(n.amount), 0);
+  const el = $("#annualTotal");
+  if (el) el.textContent = fmt(total);
+}
+
+function updateAnnualReminder() {
+  const reminderEl = $("#annualReminder");
+  const textEl = $("#annualReminderText");
+  if (!reminderEl || !textEl) return;
+  const monthNum = getCurrentMonthNumber();
+  const notes = Array.isArray(state.annualNotes) ? state.annualNotes : [];
+  const matches = monthNum
+    ? notes.filter(n => Number(n.month) === monthNum && (n.name || numOf(n.amount) > 0))
+    : [];
+  if (matches.length === 0) {
+    reminderEl.hidden = true;
+    return;
+  }
+  const total = matches.reduce((acc, n) => acc + numOf(n.amount), 0);
+  const text = matches
+    .map(n => `${n.name || "（未命名）"}（${fmt(numOf(n.amount))}）`)
+    .join("、");
+  textEl.textContent = `${text} — 共 ${fmt(total)}`;
+  reminderEl.hidden = false;
+}
+
+// Open / close annual modal
+function openAnnual() {
+  if (!Array.isArray(state.annualNotes)) state.annualNotes = [];
+  renderAnnualList();
+  $("#annualModal").hidden = false;
+  document.body.classList.add("modal-open");
+}
+function closeAnnual() {
+  $("#annualModal").hidden = true;
+  document.body.classList.remove("modal-open");
+  updateAnnualReminder();
+}
+
+// Wire up annual modal
+$("#btnAnnual").addEventListener("click", openAnnual);
+$("#annualCloseBtn").addEventListener("click", closeAnnual);
+$("#annualDoneBtn").addEventListener("click", closeAnnual);
+$("#annualReminderEdit").addEventListener("click", openAnnual);
+$("#annualModal").addEventListener("click", e => {
+  if (e.target.id === "annualModal") closeAnnual();
+});
+
+// Add new annual entry
+document.addEventListener("click", e => {
+  const add = e.target.closest('[data-add="annual"]');
+  if (!add) return;
+  if (!Array.isArray(state.annualNotes)) state.annualNotes = [];
+  const monthNum = getCurrentMonthNumber() || (new Date().getMonth() + 1);
+  state.annualNotes.push({ id: makeAnnualId(), name: "", month: monthNum, amount: "" });
+  renderAnnualList();
+  scheduleSave();
+  // Focus the new row's name input
+  const last = $("#annualList .annual-row:last-child .lbl");
+  if (last) last.focus();
+});
+
+// Edit / delete inside annual modal
+document.addEventListener("input", e => {
+  const row = e.target.closest(".annual-row");
+  if (!row) return;
+  const id = row.dataset.id;
+  const note = (state.annualNotes || []).find(n => n.id === id);
+  if (!note) return;
+  const t = e.target;
+  if (t.classList.contains("lbl")) note.name = t.value;
+  else if (t.classList.contains("mon")) note.month = parseInt(t.value, 10);
+  else if (t.classList.contains("val")) note.amount = t.value;
+  updateAnnualTotal();
+  scheduleSave();
+});
+document.addEventListener("change", e => {
+  // Ensure <select> change events also persist (Firefox sometimes only fires change)
+  if (e.target.matches(".annual-row .mon")) {
+    const row = e.target.closest(".annual-row");
+    const note = (state.annualNotes || []).find(n => n.id === row.dataset.id);
+    if (note) {
+      note.month = parseInt(e.target.value, 10);
+      scheduleSave();
+    }
+  }
+});
+document.addEventListener("click", e => {
+  const del = e.target.closest(".annual-row .del");
+  if (!del) return;
+  const row = del.closest(".annual-row");
+  const id = row.dataset.id;
+  const idx = (state.annualNotes || []).findIndex(n => n.id === id);
+  if (idx >= 0) state.annualNotes.splice(idx, 1);
+  renderAnnualList();
+  scheduleSave();
+});
+
 // ---------- Help modal ----------
 const HELP_SEEN_KEY = "personal-finance-help-seen-v1";
 
@@ -1847,9 +2225,11 @@ $("#helpModal").addEventListener("click", e => {
   if (e.target.id === "helpModal") closeHelp();
 });
 
-// ESC closes
+// ESC closes whichever modal is open
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape" && !$("#helpModal").hidden) closeHelp();
+  if (e.key !== "Escape") return;
+  if (!$("#helpModal").hidden)   closeHelp();
+  else if (!$("#annualModal").hidden) closeAnnual();
 });
 
 // First-visit auto-open
