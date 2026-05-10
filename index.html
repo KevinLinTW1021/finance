@@ -240,6 +240,34 @@
   }
   .row .handle:hover { color: var(--accent); background: var(--accent-soft); }
   .row .handle:active { cursor: grabbing; }
+
+  /* Stock detail rows: name / shares / cost / total */
+  .row.stock-row {
+    grid-template-columns: 22px minmax(0, 1.4fr) 76px 92px minmax(0, 1fr) 32px;
+    gap: 4px;
+  }
+  .row.stock-row .computed {
+    text-align: right;
+    padding: 8px 12px;
+    background: var(--accent-soft);
+    border: 1px solid #f3e8b8;
+    border-radius: 8px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  .col-header.stock-cols {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1.4fr) 76px 92px minmax(0, 1fr) 32px;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--muted);
+    padding: 4px 6px;
+    margin-bottom: 4px;
+    letter-spacing: 0.05em;
+  }
+  .col-header.stock-cols > span { padding: 0 6px; }
+  .col-header.stock-cols .right { text-align: right; }
   .row .lbl {
     border: 1px solid transparent;
     border-radius: 6px;
@@ -529,6 +557,20 @@
       <div class="row-list" id="assetList"></div>
       <button class="add-btn" data-add="asset">＋ 新增資產項目</button>
 
+      <div class="section-label asset" style="margin-top:18px;"><span class="marker">▌</span>持股明細
+        <span style="font-weight:400; font-size:11px; color:var(--muted); margin-left:auto;">合計自動加進「總資產」</span>
+      </div>
+      <div class="col-header stock-cols">
+        <span></span>
+        <span>名稱</span>
+        <span class="right">股數</span>
+        <span class="right">每股成本</span>
+        <span class="right">合計</span>
+        <span></span>
+      </div>
+      <div class="row-list" id="stocksList"></div>
+      <button class="add-btn" data-add="stocks">＋ 新增持股</button>
+
       <div class="section-label liability" style="margin-top:18px;"><span class="marker">▌</span>負　債</div>
       <div class="row-list" id="liabilityList"></div>
       <button class="add-btn" data-add="liability">＋ 新增負債項目</button>
@@ -579,6 +621,7 @@
       <li><strong>調整順序</strong>：按住左側的 <code>⋮⋮</code> 把手往上下拖</li>
       <li><strong>刪除</strong>：點右邊的 <code>×</code></li>
       <li><strong>新增</strong>：點分區下方虛線框的「＋ 新增…」</li>
+      <li><strong>股票/基金</strong>：「資產」區下方有「持股明細」子區，填名稱 / 股數 / 每股成本 → 自動算合計並加進總資產（適合看平均成本）</li>
     </ul>
 
     <h3>每月怎麼用</h3>
@@ -656,10 +699,13 @@ const DEFAULT_TEMPLATE = {
     { label: "銀行貸款支出", value: "" },
   ],
   asset: [
-    { label: "銀行儲蓄",       value: "" },
-    { label: "股票 / 基金 / 存單", value: "" },
-    { label: "房地產",         value: "" },
-    { label: "企業投資",       value: "" },
+    { label: "銀行儲蓄", value: "" },
+    { label: "房地產",   value: "" },
+    { label: "企業投資", value: "" },
+  ],
+  // Stocks have a different shape (name / shares / cost) and roll into asset total.
+  stocks: [
+    { name: "", shares: "", cost: "" },
   ],
   liability: [
     { label: "住房抵押貸款",   value: "" },
@@ -693,6 +739,7 @@ function freshMonth(label) {
     expense:   structuredClone(DEFAULT_TEMPLATE.expense),
     asset:     structuredClone(DEFAULT_TEMPLATE.asset),
     liability: structuredClone(DEFAULT_TEMPLATE.liability),
+    stocks:    structuredClone(DEFAULT_TEMPLATE.stocks),
   };
 }
 function freshState() {
@@ -774,11 +821,46 @@ function renderSection(sectionKey) {
     list.appendChild(row);
   });
 }
+function renderStocks() {
+  const list = $("#stocksList");
+  if (!list) return;
+  const m = currentMonth();
+  if (!Array.isArray(m.stocks)) m.stocks = [];
+  list.innerHTML = "";
+  m.stocks.forEach((it, idx) => {
+    const row = document.createElement("div");
+    row.className = "row stock-row";
+    row.dataset.section = "stocks";
+    row.dataset.idx = idx;
+    row.innerHTML = `
+      <span class="handle" title="按住拖曳調整順序">⋮⋮</span>
+      <input type="text" class="lbl" placeholder="例如：國泰高股息" />
+      <input type="number" class="val" data-field="shares" placeholder="股數" inputmode="decimal" step="any" />
+      <input type="number" class="val" data-field="cost" placeholder="每股成本" inputmode="decimal" step="any" />
+      <span class="computed">0</span>
+      <button type="button" class="del" title="刪除這列">×</button>
+    `;
+    row.querySelector(".lbl").value = it.name || "";
+    row.querySelector('[data-field="shares"]').value = it.shares || "";
+    row.querySelector('[data-field="cost"]').value = it.cost || "";
+    list.appendChild(row);
+    updateStockTotal(row);
+  });
+}
+function updateStockTotal(row) {
+  const idx = parseInt(row.dataset.idx, 10);
+  const m = currentMonth();
+  const it = (m.stocks || [])[idx];
+  if (!it) return;
+  const total = numOf(it.shares) * numOf(it.cost);
+  row.querySelector(".computed").textContent = fmt(total);
+}
 function renderAll() {
   $("#metaName").value = state.meta.name || "";
   const m = currentMonth();
   $("#currentMonthLabel").textContent = m.label || "（未命名）";
   SECTIONS.forEach(renderSection);
+  renderStocks();
   recalc();
 }
 
@@ -788,6 +870,10 @@ function computeSums(month) {
   for (const k of SECTIONS) {
     sums[k] = month[k].reduce((acc, it) => acc + numOf(it.value), 0);
   }
+  // Stocks roll into the asset total. Keep stockTotal exposed for export.
+  const stocks = Array.isArray(month.stocks) ? month.stocks : [];
+  sums.stocks = stocks.reduce((acc, s) => acc + numOf(s.shares) * numOf(s.cost), 0);
+  sums.asset += sums.stocks;
   return sums;
 }
 function recalc() {
@@ -836,6 +922,7 @@ function normalizeImported(parsed) {
         expense:   Array.isArray(m.expense)   ? m.expense   : [],
         asset:     Array.isArray(m.asset)     ? m.asset     : [],
         liability: Array.isArray(m.liability) ? m.liability : [],
+        stocks:    Array.isArray(m.stocks)    ? m.stocks    : [],
       }));
     if (!months.length) return freshState();
     const activeId = months.some(m => m.id === parsed.activeMonthId)
@@ -857,6 +944,7 @@ function normalizeImported(parsed) {
       asset:     Array.isArray(parsed.asset)     ? parsed.asset     : [],
       liability: Array.isArray(parsed.liability) ? parsed.liability : [],
     };
+    m.stocks = [];
     return {
       meta: { name: parsed.meta?.name || "" },
       months: [m],
@@ -900,6 +988,21 @@ document.addEventListener("input", e => {
   const section = row.dataset.section;
   const idx = parseInt(row.dataset.idx, 10);
   const m = currentMonth();
+
+  if (section === "stocks") {
+    const it = (m.stocks || [])[idx];
+    if (!it) return;
+    if (t.classList.contains("lbl")) it.name = t.value;
+    else if (t.classList.contains("val")) {
+      const field = t.dataset.field;  // "shares" or "cost"
+      if (field) it[field] = t.value;
+      updateStockTotal(row);
+      recalc();
+    }
+    scheduleSave();
+    return;
+  }
+
   if (!m[section] || !m[section][idx]) return;
   if (t.classList.contains("lbl")) m[section][idx].label = t.value;
   else if (t.classList.contains("val")) {
@@ -917,8 +1020,13 @@ document.addEventListener("click", e => {
     const section = row.dataset.section;
     const idx = parseInt(row.dataset.idx, 10);
     const m = currentMonth();
-    m[section].splice(idx, 1);
-    renderSection(section);
+    if (section === "stocks") {
+      (m.stocks || []).splice(idx, 1);
+      renderStocks();
+    } else {
+      m[section].splice(idx, 1);
+      renderSection(section);
+    }
     recalc();
     scheduleSave();
     return;
@@ -927,11 +1035,20 @@ document.addEventListener("click", e => {
   if (add) {
     const section = add.dataset.add;
     const m = currentMonth();
-    m[section].push({ label: "", value: "" });
-    renderSection(section);
-    const list = $("#" + section + "List");
-    const lastLbl = list.querySelector(".row:last-child .lbl");
-    if (lastLbl) lastLbl.focus();
+    if (section === "stocks") {
+      if (!Array.isArray(m.stocks)) m.stocks = [];
+      m.stocks.push({ name: "", shares: "", cost: "" });
+      renderStocks();
+      const list = $("#stocksList");
+      const lastLbl = list.querySelector(".row:last-child .lbl");
+      if (lastLbl) lastLbl.focus();
+    } else {
+      m[section].push({ label: "", value: "" });
+      renderSection(section);
+      const list = $("#" + section + "List");
+      const lastLbl = list.querySelector(".row:last-child .lbl");
+      if (lastLbl) lastLbl.focus();
+    }
     scheduleSave();
   }
 });
@@ -1160,6 +1277,38 @@ S.sectionExpense   = sectionStyle(C.expense,   C.expenseSoft);
 S.sectionAsset     = sectionStyle(C.asset,     C.assetSoft);
 S.sectionLiability = sectionStyle(C.liability, C.liabilitySoft);
 
+// Sub-section style for stocks block inside 資產
+S.subBlockHeader = {
+  font: font({ bold: true, sz: 11, color: { rgb: C.asset } }),
+  fill: fill("F0F7FF"),
+  alignment: { horizontal: "left", vertical: "center", indent: 1 },
+  border: brd(C.assetSoft),
+};
+S.itemSubLabel = {
+  font: font({ sz: 11, color: { rgb: C.ink } }),
+  alignment: { horizontal: "left", vertical: "center", indent: 2 },
+  border: brd(C.line),
+};
+S.itemSubValue = {
+  font: font({ sz: 11, color: { rgb: C.ink } }),
+  alignment: { horizontal: "right", vertical: "center", indent: 1 },
+  numFmt: NUM_FMT,
+  border: brd(C.line),
+};
+S.subTotalLabel = {
+  font: font({ bold: true, sz: 11, color: { rgb: C.asset } }),
+  fill: fill("F0F7FF"),
+  alignment: { horizontal: "left", vertical: "center", indent: 2 },
+  border: brd(C.assetSoft),
+};
+S.subTotalValue = {
+  font: font({ bold: true, sz: 11, color: { rgb: C.asset } }),
+  fill: fill("F0F7FF"),
+  alignment: { horizontal: "right", vertical: "center", indent: 1 },
+  numFmt: NUM_FMT,
+  border: brd(C.assetSoft),
+};
+
 // ---- Cell helpers ----
 function tx(v, s) { return { v: String(v == null ? "" : v), t: "s", s }; }
 function nm(v, s) { return { v: typeof v === "number" ? v : (Number(v) || 0), t: "n", s }; }
@@ -1246,13 +1395,41 @@ function buildMonthSheet(month, ownerName) {
   pushRow(mergeRow(S.sectionAsset, "▌  資　產"), 22);
   addMerge(rows.length - 1, 0, N - 1);
   pushRow([tx("項　目", S.colHeader), tx("金　額", S.colHeader)], 20);
-  month.asset.forEach((it, i) => {
-    const z = i % 2 === 1;
+  let assetZebra = 0;
+  month.asset.forEach(it => {
+    const z = assetZebra++ % 2 === 1;
     pushRow([
       tx(it.label || "", z ? S.itemLabelZebra : S.itemLabel),
       nm(it.value, z ? S.itemValueZebra : S.itemValue),
     ], 18);
   });
+
+  // Stocks sub-section (rolls into 總資產)
+  const stocks = (Array.isArray(month.stocks) ? month.stocks : [])
+    .filter(s => s.name || s.shares || s.cost);
+  if (stocks.length) {
+    pushRow(mergeRow(S.subBlockHeader, "　持股明細  ·  名稱（股數 × 每股成本）= 合計"), 20);
+    addMerge(rows.length - 1, 0, N - 1);
+    stocks.forEach(s => {
+      const sh = numOf(s.shares);
+      const cs = numOf(s.cost);
+      const total = sh * cs;
+      const desc = (s.name || "未命名") + "（"
+        + sh.toLocaleString("en-US", { maximumFractionDigits: 4 })
+        + " × "
+        + cs.toLocaleString("en-US", { maximumFractionDigits: 4 })
+        + "）";
+      pushRow([
+        tx(desc, S.itemSubLabel),
+        nm(total, S.itemSubValue),
+      ], 18);
+    });
+    pushRow([
+      tx("　持股小計", S.subTotalLabel),
+      nm(sums.stocks, S.subTotalValue),
+    ], 18);
+  }
+
   pushRow([tx("總　資　產", S.totalLabel), nm(sums.asset, S.totalValue)], 22);
 
   pushRow([], 8);
@@ -1483,13 +1660,15 @@ document.addEventListener("drop", e => {
   if (targetIdx === fromIdx) return;
 
   const m = currentMonth();
-  const [moved] = m[section].splice(fromIdx, 1);
+  const arr = section === "stocks" ? (m.stocks || []) : m[section];
+  const [moved] = arr.splice(fromIdx, 1);
   let insertAt = targetIdx + (before ? 0 : 1);
   if (fromIdx < targetIdx) insertAt -= 1; // shift due to removal
-  insertAt = Math.max(0, Math.min(insertAt, m[section].length));
-  m[section].splice(insertAt, 0, moved);
+  insertAt = Math.max(0, Math.min(insertAt, arr.length));
+  arr.splice(insertAt, 0, moved);
 
-  renderSection(section);
+  if (section === "stocks") renderStocks();
+  else renderSection(section);
   recalc();
   scheduleSave();
 });
@@ -1547,6 +1726,7 @@ function addMonth() {
   // returning after a long gap.
   const src = latestMonth();
   const cloneRows = (arr) => arr.map(it => ({ label: it.label, value: it.value }));
+  const cloneStocks = (arr) => (arr || []).map(it => ({ name: it.name, shares: it.shares, cost: it.cost }));
   const m = src ? {
     id: makeId(),
     label: nextMonthLabel(src.label),
@@ -1554,6 +1734,7 @@ function addMonth() {
     expense:   cloneRows(src.expense),
     asset:     cloneRows(src.asset),
     liability: cloneRows(src.liability),
+    stocks:    cloneStocks(src.stocks),
   } : freshMonth();
   state.months.push(m);
   state.activeMonthId = m.id;
