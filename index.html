@@ -1354,16 +1354,18 @@ function nextMonthLabel(label) {
 
 function addMonth() {
   const cur = currentMonth();
-  // Copy item labels from current month, reset values to empty.
-  // (If there's no current month, fall back to default template.)
-  const copyLabels = (arr) => arr.map(it => ({ label: it.label, value: "" }));
+  // Copy entire structure (labels AND values) from the current month.
+  // For monthly bookkeeping, salary/rent/loan-balance/savings rarely move
+  // month-to-month — carrying values forward saves re-entry; user only
+  // edits the items that actually changed.
+  const cloneRows = (arr) => arr.map(it => ({ label: it.label, value: it.value }));
   const m = cur ? {
     id: makeId(),
     label: nextMonthLabel(cur.label),
-    income:    copyLabels(cur.income),
-    expense:   copyLabels(cur.expense),
-    asset:     copyLabels(cur.asset),
-    liability: copyLabels(cur.liability),
+    income:    cloneRows(cur.income),
+    expense:   cloneRows(cur.expense),
+    asset:     cloneRows(cur.asset),
+    liability: cloneRows(cur.liability),
   } : freshMonth();
   state.months.push(m);
   state.activeMonthId = m.id;
