@@ -1352,20 +1352,36 @@ function nextMonthLabel(label) {
   return candidate;
 }
 
+function latestMonth() {
+  // Prefer the chronologically latest month by YYYY-MM label;
+  // fall back to last-in-list (insertion order) for non-standard labels.
+  if (!state.months.length) return null;
+  const parseable = state.months
+    .map(m => {
+      const x = String(m.label || "").match(/^(\d{4})-(\d{1,2})$/);
+      return x ? { m, key: parseInt(x[1], 10) * 12 + parseInt(x[2], 10) } : null;
+    })
+    .filter(Boolean);
+  if (parseable.length) {
+    parseable.sort((a, b) => b.key - a.key);
+    return parseable[0].m;
+  }
+  return state.months[state.months.length - 1];
+}
+
 function addMonth() {
-  const cur = currentMonth();
-  // Copy entire structure (labels AND values) from the current month.
-  // For monthly bookkeeping, salary/rent/loan-balance/savings rarely move
-  // month-to-month — carrying values forward saves re-entry; user only
-  // edits the items that actually changed.
+  // Always copy from the chronologically latest month, not the currently
+  // viewed one — saves the user from having to switch tabs first when
+  // returning after a long gap.
+  const src = latestMonth();
   const cloneRows = (arr) => arr.map(it => ({ label: it.label, value: it.value }));
-  const m = cur ? {
+  const m = src ? {
     id: makeId(),
-    label: nextMonthLabel(cur.label),
-    income:    cloneRows(cur.income),
-    expense:   cloneRows(cur.expense),
-    asset:     cloneRows(cur.asset),
-    liability: cloneRows(cur.liability),
+    label: nextMonthLabel(src.label),
+    income:    cloneRows(src.income),
+    expense:   cloneRows(src.expense),
+    asset:     cloneRows(src.asset),
+    liability: cloneRows(src.liability),
   } : freshMonth();
   state.months.push(m);
   state.activeMonthId = m.id;
