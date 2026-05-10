@@ -1,0 +1,1463 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="個人財務報表 — 簡潔的月度損益表與資產負債表，可多月份切換、列印 PDF、匯出美化過的 Excel。所有資料只存在你自己的瀏覽器。" />
+<meta name="theme-color" content="#b8860b" />
+<meta name="color-scheme" content="light" />
+<meta property="og:title" content="個人財務報表" />
+<meta property="og:description" content="簡潔的月度損益表與資產負債表，可多月份切換、列印 PDF、匯出 Excel。資料只存在你自己的瀏覽器。" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23b8860b'/><text x='16' y='23' font-family='sans-serif' font-size='22' font-weight='bold' text-anchor='middle' fill='white'>%24</text></svg>" />
+<title>個人財務報表</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<style>
+  :root {
+    --bg: #f3f1ec;
+    --paper: #ffffff;
+    --ink: #1f2933;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --line-strong: #d1d5db;
+    --accent: #b8860b;
+    --accent-soft: #fff8e1;
+    --income: #0f766e;
+    --income-soft: #ecfdf5;
+    --expense: #b91c1c;
+    --expense-soft: #fef2f2;
+    --asset: #1d4ed8;
+    --asset-soft: #eff6ff;
+    --liability: #92400e;
+    --liability-soft: #fffbeb;
+    --total: #111827;
+    --positive: #047857;
+    --negative: #b91c1c;
+    --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .page { max-width: 1200px; margin: 24px auto 80px; padding: 0 16px; }
+
+  /* ---------- Toolbar ---------- */
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end;
+    background: var(--paper); padding: 10px 16px;
+    border: 1px solid var(--line); border-radius: 12px;
+    margin-bottom: 16px; box-shadow: var(--shadow);
+    position: sticky; top: 12px; z-index: 50;
+  }
+  .toolbar .grow { flex: 1; font-weight: 600; color: var(--accent); letter-spacing: 0.05em; }
+  .btn {
+    appearance: none; border: 1px solid var(--line);
+    background: #fafafa; color: var(--ink);
+    padding: 8px 14px; border-radius: 8px;
+    font-size: 13px; cursor: pointer; font-family: inherit;
+    transition: background 0.15s, border-color 0.15s, transform 0.05s;
+  }
+  .btn:hover { background: #f1f1f1; border-color: var(--line-strong); }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { background: #a07509; border-color: #a07509; }
+  .btn-ghost { background: transparent; }
+  .save-status {
+    font-size: 12px; color: var(--muted);
+    margin-right: 8px; min-width: 80px; text-align: right;
+  }
+
+  /* ---------- Header ---------- */
+  .header {
+    background: var(--paper); border: 1px solid var(--line);
+    border-radius: 16px; padding: 24px 28px;
+    box-shadow: var(--shadow); margin-bottom: 16px;
+    position: relative; overflow: hidden;
+  }
+  .header::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #b8860b, #d4a72c, #b8860b);
+  }
+  .header h1 { margin: 0 0 16px 0; font-size: 24px; letter-spacing: 0.15em; color: var(--ink); }
+  .meta-grid { display: grid; grid-template-columns: 1fr; gap: 12px 24px; max-width: 320px; }
+  .meta-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+  .meta-grid input {
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 14px;
+    background: #fafafa;
+    font-family: inherit;
+    color: var(--ink);
+  }
+  .meta-grid input:focus { outline: none; border-color: var(--accent); background: #fff; }
+
+  /* ---------- Month tabs ---------- */
+  .tabs {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 8px 10px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+  }
+  .tabs-label {
+    font-size: 12px; color: var(--muted);
+    margin-right: 6px;
+    letter-spacing: 0.05em;
+  }
+  .tab {
+    appearance: none;
+    display: inline-flex; align-items: center; gap: 2px;
+    padding: 6px 6px 6px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    border: 1px solid var(--line);
+    background: #fafafa;
+    color: var(--ink);
+    transition: background 0.1s, border-color 0.1s, color 0.1s;
+  }
+  .tab:hover { background: #f1f1f1; border-color: var(--line-strong); }
+  .tab.active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .tab .tab-label { padding: 0 4px 0 0; }
+  .tab .tab-del {
+    appearance: none; border: none; background: transparent;
+    color: #cbd5e1; font-size: 14px; line-height: 1;
+    width: 20px; height: 20px;
+    border-radius: 4px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-left: 2px;
+    visibility: hidden;
+  }
+  .tab:hover .tab-del, .tab.active .tab-del { visibility: visible; }
+  .tab .tab-del:hover { background: #fef2f2; color: var(--expense); }
+  .tab-add {
+    appearance: none;
+    border: 1px dashed var(--line-strong);
+    background: transparent;
+    color: var(--muted);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    margin-left: auto;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+  }
+  .tab-add:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .tab-label-input {
+    border: 1px solid var(--accent);
+    background: #fff;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: inherit;
+    color: var(--ink);
+    width: 110px;
+    outline: none;
+  }
+  .month-banner {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    margin: -8px 0 12px;
+    letter-spacing: 0.05em;
+  }
+  .month-banner strong { color: var(--accent); font-weight: 600; }
+
+  /* ---------- Cards ---------- */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 960px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--paper); border: 1px solid var(--line);
+    border-radius: 16px; box-shadow: var(--shadow);
+    padding: 20px 22px; break-inside: avoid;
+  }
+  .card h2 {
+    margin: 0 0 14px 0; font-size: 18px; letter-spacing: 0.15em;
+    text-align: center; padding-bottom: 10px; border-bottom: 2px solid var(--line);
+  }
+  .section-label {
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 14px;
+    margin: 14px 0 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+  }
+  .section-label.income    { background: var(--income-soft);    color: var(--income); }
+  .section-label.expense   { background: var(--expense-soft);   color: var(--expense); }
+  .section-label.asset     { background: var(--asset-soft);     color: var(--asset); }
+  .section-label.liability { background: var(--liability-soft); color: var(--liability); }
+  .section-label .marker { font-size: 16px; }
+
+  /* ---------- Rows ---------- */
+  .row-list { display: flex; flex-direction: column; gap: 8px; }
+  .row {
+    display: grid;
+    grid-template-columns: 22px 1fr 160px 32px;
+    gap: 6px;
+    align-items: center;
+    border-radius: 8px;
+    transition: background 0.1s, opacity 0.1s, box-shadow 0.1s;
+  }
+  .row.dragging {
+    opacity: 0.4;
+    background: var(--accent-soft);
+  }
+  .row.drop-above { box-shadow: inset 0 3px 0 0 var(--accent); }
+  .row.drop-below { box-shadow: inset 0 -3px 0 0 var(--accent); }
+
+  .row .handle {
+    width: 22px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #cbd5e1;
+    cursor: grab;
+    user-select: none;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1;
+    transition: color 0.1s, background 0.1s;
+  }
+  .row .handle:hover { color: var(--accent); background: var(--accent-soft); }
+  .row .handle:active { cursor: grabbing; }
+  .row .lbl {
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--ink);
+    background: transparent;
+    transition: background 0.1s, border-color 0.1s;
+  }
+  .row .lbl:hover { background: #fafafa; }
+  .row .lbl:focus { outline: none; border-color: var(--accent); background: #fff; }
+
+  .row .val {
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--ink);
+    background: #fafafa;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    transition: background 0.1s, border-color 0.1s, box-shadow 0.1s;
+    width: 100%;
+    -moz-appearance: textfield;
+  }
+  .row .val::-webkit-outer-spin-button,
+  .row .val::-webkit-inner-spin-button {
+    -webkit-appearance: none; margin: 0;
+  }
+  .row .val:hover { border-color: #9ca3af; }
+  .row .val:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(184, 134, 11, 0.15);
+  }
+  .row .val::placeholder { color: #cbd5e1; }
+
+  .row .del {
+    appearance: none;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #cbd5e1;
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+  }
+  .row .del:hover {
+    background: #fef2f2; color: var(--expense); border-color: #fecaca;
+  }
+
+  .add-btn {
+    appearance: none;
+    width: 100%;
+    margin-top: 10px;
+    padding: 8px 12px;
+    border: 1px dashed var(--line-strong);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+  }
+  .add-btn:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  /* ---------- Summary ---------- */
+  .summary {
+    margin-top: 18px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .summary .row-s {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+  .summary .row-s + .row-s { border-top: 1px solid var(--line); }
+  .summary .row-s .v { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .summary .row-s.muted { color: var(--muted); background: #fafafa; }
+  .summary .row-s.highlight { background: var(--accent-soft); }
+  .summary .row-s.highlight .v { color: var(--accent); font-size: 16px; }
+  .summary .row-s.cashflow .v.positive { color: var(--positive); font-size: 18px; }
+  .summary .row-s.cashflow .v.negative { color: var(--negative); font-size: 18px; }
+
+  .footer { text-align: center; color: var(--muted); font-size: 11px; margin-top: 24px; }
+
+  /* ---------- Print ---------- */
+  @media print {
+    @page { size: A4; margin: 12mm; }
+    html, body { background: #fff; font-size: 11px; }
+    .toolbar, .no-print, .add-btn, .row .del, .row .handle, .tabs { display: none !important; }
+    .month-banner { color: #555; margin: 0 0 6px; font-size: 12px; }
+    .page { margin: 0; padding: 0; max-width: none; }
+    .header, .card {
+      box-shadow: none; border: 1px solid #d1d5db;
+      page-break-inside: avoid; break-inside: avoid;
+    }
+    .grid { gap: 8px; }
+    .card { padding: 12px 14px; }
+    .header { padding: 12px 16px; margin-bottom: 8px; }
+    .header h1 { font-size: 18px; margin-bottom: 8px; }
+    .meta-grid input { background: transparent; border: none; border-bottom: 1px solid #d1d5db; border-radius: 0; padding: 2px 0; }
+    .row { grid-template-columns: 1fr 120px; gap: 4px; box-shadow: none !important; }
+    .row .lbl, .row .val {
+      background: transparent !important;
+      border: none !important;
+      border-bottom: 1px solid #e5e7eb !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      padding: 4px 6px !important;
+    }
+    .row .lbl::placeholder, .row .val::placeholder { color: transparent !important; }
+    .section-label { padding: 4px 8px; font-size: 12px; margin: 8px 0 4px; }
+    .summary .row-s { padding: 6px 10px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="toolbar no-print">
+    <span class="grow">個人財務報表</span>
+    <span class="save-status" id="saveStatus">已自動暫存</span>
+    <button class="btn" id="btnLoadJson">載入 JSON</button>
+    <button class="btn" id="btnSaveJson">下載 JSON</button>
+    <button class="btn" id="btnExportXlsx">匯出 Excel</button>
+    <button class="btn btn-primary" id="btnPrint">列印 / 存成 PDF</button>
+    <button class="btn btn-ghost" id="btnReset" title="清空所有欄位並還原預設項目">重設</button>
+    <input type="file" id="fileInput" accept="application/json" style="display:none" />
+  </div>
+
+  <!-- Header / Personal Info -->
+  <div class="header">
+    <h1>個 人 財 務 報 表</h1>
+    <div class="meta-grid">
+      <label>姓名
+        <input type="text" id="metaName" />
+      </label>
+    </div>
+  </div>
+
+  <div class="tabs no-print" id="tabs"></div>
+
+  <div class="month-banner">目前月份：<strong id="currentMonthLabel">—</strong></div>
+
+  <div class="grid">
+
+    <!-- ============= 損益表 ============= -->
+    <div class="card">
+      <h2>損 益 表</h2>
+
+      <div class="section-label income"><span class="marker">▌</span>收　入</div>
+      <div class="row-list" id="incomeList"></div>
+      <button class="add-btn" data-add="income">＋ 新增收入項目</button>
+
+      <div class="section-label expense" style="margin-top:18px;"><span class="marker">▌</span>支　出</div>
+      <div class="row-list" id="expenseList"></div>
+      <button class="add-btn" data-add="expense">＋ 新增支出項目</button>
+
+      <div class="summary">
+        <div class="row-s">
+          <span>總收入</span>
+          <span class="v" id="totalIncome">0</span>
+        </div>
+        <div class="row-s">
+          <span>總支出</span>
+          <span class="v" id="totalExpense">0</span>
+        </div>
+        <div class="row-s cashflow highlight">
+          <span>月現金流（總收入 − 總支出）</span>
+          <span class="v" id="monthlyCashflow">0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============= 資產負債表 ============= -->
+    <div class="card">
+      <h2>資 產 負 債 表</h2>
+
+      <div class="section-label asset"><span class="marker">▌</span>資　產</div>
+      <div class="row-list" id="assetList"></div>
+      <button class="add-btn" data-add="asset">＋ 新增資產項目</button>
+
+      <div class="section-label liability" style="margin-top:18px;"><span class="marker">▌</span>負　債</div>
+      <div class="row-list" id="liabilityList"></div>
+      <button class="add-btn" data-add="liability">＋ 新增負債項目</button>
+
+      <div class="summary">
+        <div class="row-s">
+          <span>總資產</span>
+          <span class="v" id="totalAsset">0</span>
+        </div>
+        <div class="row-s">
+          <span>總負債</span>
+          <span class="v" id="totalLiability">0</span>
+        </div>
+        <div class="row-s highlight">
+          <span>淨值（總資產 − 總負債）</span>
+          <span class="v" id="netWorth">0</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    所有資料只儲存在你目前使用的瀏覽器（localStorage），不會上傳任何伺服器，也不會跨裝置同步。<br />
+    請定期按「下載 JSON」或「匯出 Excel」做備份。清除瀏覽器資料 / 換瀏覽器 / 換裝置都會看不到既有資料。
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Defaults ----------
+const DEFAULT_TEMPLATE = {
+  income: [
+    { label: "工資",       value: "" },
+    { label: "利息",       value: "" },
+    { label: "股利",       value: "" },
+    { label: "房地產收入", value: "" },
+    { label: "企業收入",   value: "" },
+  ],
+  expense: [
+    { label: "稅金",         value: "" },
+    { label: "住房抵押貸款", value: "" },
+    { label: "教育貸款",     value: "" },
+    { label: "購車貸款",     value: "" },
+    { label: "信用卡支出",   value: "" },
+    { label: "額外支出",     value: "" },
+    { label: "其他支出",     value: "" },
+    { label: "小孩支出",     value: "" },
+    { label: "銀行貸款支出", value: "" },
+  ],
+  asset: [
+    { label: "銀行儲蓄",       value: "" },
+    { label: "股票 / 基金 / 存單", value: "" },
+    { label: "房地產",         value: "" },
+    { label: "企業投資",       value: "" },
+  ],
+  liability: [
+    { label: "住房抵押貸款",   value: "" },
+    { label: "教育貸款",       value: "" },
+    { label: "購車貸款",       value: "" },
+    { label: "信用卡",         value: "" },
+    { label: "額外負債",       value: "" },
+    { label: "房地產抵押貸款", value: "" },
+    { label: "負債（企業）",   value: "" },
+    { label: "銀行貸款",       value: "" },
+  ],
+};
+const SECTIONS = ["income", "expense", "asset", "liability"];
+
+// ---------- State (multi-month) ----------
+const STORE_KEY = "personal-finance-form-v3";
+const STORE_KEY_V2 = "personal-finance-form-v2";
+
+function makeId() {
+  return "m_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+function todayYYYYMM() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+}
+function freshMonth(label) {
+  return {
+    id: makeId(),
+    label: label || todayYYYYMM(),
+    income:    structuredClone(DEFAULT_TEMPLATE.income),
+    expense:   structuredClone(DEFAULT_TEMPLATE.expense),
+    asset:     structuredClone(DEFAULT_TEMPLATE.asset),
+    liability: structuredClone(DEFAULT_TEMPLATE.liability),
+  };
+}
+function freshState() {
+  const m = freshMonth(todayYYYYMM());
+  return { meta: { name: "" }, months: [m], activeMonthId: m.id };
+}
+
+let state = freshState();
+function currentMonth() {
+  return state.months.find(m => m.id === state.activeMonthId) || state.months[0];
+}
+
+// ---------- Helpers ----------
+const $  = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+const fmt = n => {
+  if (!isFinite(n)) n = 0;
+  const sign = n < 0 ? "-" : "";
+  return sign + Math.abs(Math.round(n)).toLocaleString("en-US");
+};
+const numOf = v => {
+  const x = parseFloat(v);
+  return isFinite(x) ? x : 0;
+};
+
+// ---------- Render ----------
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+function renderTabs() {
+  const tabsEl = $("#tabs");
+  tabsEl.innerHTML = "";
+  const lbl = document.createElement("span");
+  lbl.className = "tabs-label";
+  lbl.textContent = "月份：";
+  tabsEl.appendChild(lbl);
+
+  state.months.forEach(m => {
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.className = "tab" + (m.id === state.activeMonthId ? " active" : "");
+    tab.dataset.id = m.id;
+    tab.title = "點選切換、雙擊改名";
+    tab.innerHTML = `
+      <span class="tab-label">${escapeHtml(m.label || "（未命名）")}</span>
+      <button type="button" class="tab-del" title="刪除月份">×</button>
+    `;
+    tabsEl.appendChild(tab);
+  });
+
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "tab-add";
+  add.id = "tabAdd";
+  add.textContent = "＋ 新增月份";
+  tabsEl.appendChild(add);
+}
+
+function renderSection(sectionKey) {
+  const list = $("#" + sectionKey + "List");
+  const m = currentMonth();
+  list.innerHTML = "";
+  m[sectionKey].forEach((item, idx) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.dataset.section = sectionKey;
+    row.dataset.idx = idx;
+    row.innerHTML = `
+      <span class="handle" title="按住拖曳調整順序">⋮⋮</span>
+      <input type="text" class="lbl" placeholder="項目名稱" />
+      <input type="number" class="val" placeholder="0" inputmode="decimal" step="any" />
+      <button type="button" class="del" title="刪除這列">×</button>
+    `;
+    row.querySelector(".lbl").value = item.label || "";
+    row.querySelector(".val").value = item.value || "";
+    list.appendChild(row);
+  });
+}
+function renderAll() {
+  $("#metaName").value = state.meta.name || "";
+  const m = currentMonth();
+  $("#currentMonthLabel").textContent = m.label || "（未命名）";
+  SECTIONS.forEach(renderSection);
+  recalc();
+}
+
+// ---------- Recalc ----------
+function computeSums(month) {
+  const sums = {};
+  for (const k of SECTIONS) {
+    sums[k] = month[k].reduce((acc, it) => acc + numOf(it.value), 0);
+  }
+  return sums;
+}
+function recalc() {
+  const sums = computeSums(currentMonth());
+  $("#totalIncome").textContent    = fmt(sums.income);
+  $("#totalExpense").textContent   = fmt(sums.expense);
+  $("#totalAsset").textContent     = fmt(sums.asset);
+  $("#totalLiability").textContent = fmt(sums.liability);
+
+  const cf = sums.income - sums.expense;
+  const cfEl = $("#monthlyCashflow");
+  cfEl.textContent = fmt(cf);
+  cfEl.classList.toggle("positive", cf >= 0);
+  cfEl.classList.toggle("negative", cf < 0);
+
+  $("#netWorth").textContent = fmt(sums.asset - sums.liability);
+}
+
+// ---------- Persistence ----------
+let saveTimer = null;
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  $("#saveStatus").textContent = "儲存中…";
+  saveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify(state));
+      const t = new Date();
+      const hh = String(t.getHours()).padStart(2, "0");
+      const mm = String(t.getMinutes()).padStart(2, "0");
+      $("#saveStatus").textContent = `已暫存 ${hh}:${mm}`;
+    } catch (e) {
+      $("#saveStatus").textContent = "儲存失敗";
+    }
+  }, 350);
+}
+
+function normalizeImported(parsed) {
+  // v3 (multi-month)
+  if (parsed && Array.isArray(parsed.months)) {
+    const months = parsed.months
+      .filter(m => m && typeof m === "object")
+      .map(m => ({
+        id: m.id || makeId(),
+        label: m.label || todayYYYYMM(),
+        income:    Array.isArray(m.income)    ? m.income    : [],
+        expense:   Array.isArray(m.expense)   ? m.expense   : [],
+        asset:     Array.isArray(m.asset)     ? m.asset     : [],
+        liability: Array.isArray(m.liability) ? m.liability : [],
+      }));
+    if (!months.length) return freshState();
+    const activeId = months.some(m => m.id === parsed.activeMonthId)
+      ? parsed.activeMonthId
+      : months[0].id;
+    return {
+      meta: { name: parsed.meta?.name || "" },
+      months,
+      activeMonthId: activeId,
+    };
+  }
+  // v2 (single month) — migrate
+  if (parsed && (parsed.income || parsed.expense || parsed.asset || parsed.liability)) {
+    const m = {
+      id: makeId(),
+      label: parsed.meta?.date || todayYYYYMM(),
+      income:    Array.isArray(parsed.income)    ? parsed.income    : [],
+      expense:   Array.isArray(parsed.expense)   ? parsed.expense   : [],
+      asset:     Array.isArray(parsed.asset)     ? parsed.asset     : [],
+      liability: Array.isArray(parsed.liability) ? parsed.liability : [],
+    };
+    return {
+      meta: { name: parsed.meta?.name || "" },
+      months: [m],
+      activeMonthId: m.id,
+    };
+  }
+  return null;
+}
+
+function loadFromStorage() {
+  // Try v3 first
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) {
+      const normalized = normalizeImported(JSON.parse(raw));
+      if (normalized) { state = normalized; return; }
+    }
+  } catch (e) {}
+  // Migrate from v2 if present
+  try {
+    const rawV2 = localStorage.getItem(STORE_KEY_V2);
+    if (rawV2) {
+      const normalized = normalizeImported(JSON.parse(rawV2));
+      if (normalized) {
+        state = normalized;
+        // Save migrated state under v3 immediately so we don't keep re-reading v2
+        try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (_) {}
+        return;
+      }
+    }
+  } catch (e) {}
+}
+
+// ---------- Event wiring ----------
+// Edit row label / value
+document.addEventListener("input", e => {
+  const t = e.target;
+  if (t.id === "metaName") { state.meta.name = t.value; scheduleSave(); return; }
+  const row = t.closest(".row");
+  if (!row) return;
+  const section = row.dataset.section;
+  const idx = parseInt(row.dataset.idx, 10);
+  const m = currentMonth();
+  if (!m[section] || !m[section][idx]) return;
+  if (t.classList.contains("lbl")) m[section][idx].label = t.value;
+  else if (t.classList.contains("val")) {
+    m[section][idx].value = t.value;
+    recalc();
+  }
+  scheduleSave();
+});
+
+// Row delete & section "+ 新增" button
+document.addEventListener("click", e => {
+  const del = e.target.closest(".del");
+  if (del && del.closest(".row")) {
+    const row = del.closest(".row");
+    const section = row.dataset.section;
+    const idx = parseInt(row.dataset.idx, 10);
+    const m = currentMonth();
+    m[section].splice(idx, 1);
+    renderSection(section);
+    recalc();
+    scheduleSave();
+    return;
+  }
+  const add = e.target.closest("[data-add]");
+  if (add) {
+    const section = add.dataset.add;
+    const m = currentMonth();
+    m[section].push({ label: "", value: "" });
+    renderSection(section);
+    const list = $("#" + section + "List");
+    const lastLbl = list.querySelector(".row:last-child .lbl");
+    if (lastLbl) lastLbl.focus();
+    scheduleSave();
+  }
+});
+
+// ---------- Buttons ----------
+$("#btnPrint").addEventListener("click", () => window.print());
+
+$("#btnReset").addEventListener("click", () => {
+  if (!confirm("確定要清空所有月份及欄位並還原為預設項目嗎？此動作無法復原。")) return;
+  state = freshState();
+  renderTabs();
+  renderAll();
+  scheduleSave();
+});
+
+function safeName(s) {
+  return String(s || "未命名").replace(/[^\w一-龥\-]/g, "_");
+}
+
+$("#btnSaveJson").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const name = safeName(state.meta.name);
+  a.href = url;
+  a.download = `個人財務_${name}_${state.months.length}月.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+$("#btnLoadJson").addEventListener("click", () => $("#fileInput").click());
+$("#fileInput").addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const parsed = JSON.parse(ev.target.result);
+      const normalized = normalizeImported(parsed);
+      if (!normalized) throw new Error("格式錯誤");
+      state = normalized;
+      renderTabs();
+      renderAll();
+      scheduleSave();
+    } catch (err) {
+      alert("無法解析 JSON 檔案：" + err.message);
+    }
+  };
+  reader.readAsText(file, "utf-8");
+  e.target.value = "";
+});
+
+// ---------- Excel export (styled with xlsx-js-style) ----------
+function sanitizeSheetName(name, used) {
+  // Excel: 31 chars max, none of: [ ] : * ? / \
+  let n = String(name || "未命名").replace(/[\[\]:*?\/\\]/g, "_").trim();
+  if (!n) n = "月份";
+  if (n.length > 31) n = n.slice(0, 31);
+  let candidate = n;
+  let i = 2;
+  while (used.has(candidate)) {
+    const suffix = "_" + i;
+    candidate = n.slice(0, 31 - suffix.length) + suffix;
+    i++;
+  }
+  used.add(candidate);
+  return candidate;
+}
+
+// ---- Colors ----
+const C = {
+  white: "FFFFFF",
+  ink: "1F2933",
+  muted: "6B7280",
+  mutedDark: "374151",
+  line: "E5E7EB",
+  lineStrong: "D1D5DB",
+  accent: "B8860B",
+  accentSoft: "FFF8E1",
+  income: "0F766E",     incomeSoft: "ECFDF5",
+  expense: "B91C1C",    expenseSoft: "FEF2F2",
+  asset: "1D4ED8",      assetSoft: "EFF6FF",
+  liability: "92400E",  liabilitySoft: "FFFBEB",
+  totalSoft: "F9FAFB",
+  zebra: "FAFAF9",
+  positive: "047857",
+  negative: "B91C1C",
+};
+const NUM_FMT = '#,##0;[Red]-#,##0;"–"';
+
+function brd(rgb, style="thin") {
+  const b = { style, color: { rgb } };
+  return { top: b, bottom: b, left: b, right: b };
+}
+function fill(rgb) { return { patternType: "solid", fgColor: { rgb }, bgColor: { rgb } }; }
+function font(opts) { return { name: "Microsoft JhengHei", ...opts }; }
+
+// ---- Style presets ----
+const S = {
+  title: {
+    font: font({ bold: true, sz: 18, color: { rgb: C.white } }),
+    fill: fill(C.accent),
+    alignment: { horizontal: "center", vertical: "center" },
+    border: brd(C.accent, "medium"),
+  },
+  subtitle: {
+    font: font({ bold: true, sz: 13, color: { rgb: C.accent } }),
+    fill: fill(C.accentSoft),
+    alignment: { horizontal: "center", vertical: "center" },
+    border: brd(C.accent),
+  },
+  metaLabel: {
+    font: font({ bold: true, sz: 11, color: { rgb: C.muted } }),
+    alignment: { horizontal: "right", vertical: "center", indent: 1 },
+  },
+  metaValue: {
+    font: font({ sz: 12, color: { rgb: C.ink } }),
+    alignment: { horizontal: "left", vertical: "center", indent: 1 },
+    border: { bottom: { style: "thin", color: { rgb: C.lineStrong } } },
+  },
+  colHeader: {
+    font: font({ bold: true, sz: 11, color: { rgb: C.mutedDark } }),
+    fill: fill("F3F4F6"),
+    alignment: { horizontal: "center", vertical: "center" },
+    border: brd(C.lineStrong),
+  },
+  itemLabel: {
+    font: font({ sz: 11, color: { rgb: C.ink } }),
+    alignment: { horizontal: "left", vertical: "center", indent: 1 },
+    border: brd(C.line),
+  },
+  itemLabelZebra: {
+    font: font({ sz: 11, color: { rgb: C.ink } }),
+    fill: fill(C.zebra),
+    alignment: { horizontal: "left", vertical: "center", indent: 1 },
+    border: brd(C.line),
+  },
+  itemValue: {
+    font: font({ sz: 11, color: { rgb: C.ink } }),
+    alignment: { horizontal: "right", vertical: "center", indent: 1 },
+    numFmt: NUM_FMT,
+    border: brd(C.line),
+  },
+  itemValueZebra: {
+    font: font({ sz: 11, color: { rgb: C.ink } }),
+    fill: fill(C.zebra),
+    alignment: { horizontal: "right", vertical: "center", indent: 1 },
+    numFmt: NUM_FMT,
+    border: brd(C.line),
+  },
+  totalLabel: {
+    font: font({ bold: true, sz: 12, color: { rgb: C.ink } }),
+    fill: fill(C.totalSoft),
+    alignment: { horizontal: "left", vertical: "center", indent: 1 },
+    border: { ...brd(C.line), top: { style: "medium", color: { rgb: C.ink } } },
+  },
+  totalValue: {
+    font: font({ bold: true, sz: 12, color: { rgb: C.ink } }),
+    fill: fill(C.totalSoft),
+    alignment: { horizontal: "right", vertical: "center", indent: 1 },
+    numFmt: NUM_FMT,
+    border: { ...brd(C.line), top: { style: "medium", color: { rgb: C.ink } } },
+  },
+  highlightLabel: {
+    font: font({ bold: true, sz: 13, color: { rgb: C.accent } }),
+    fill: fill(C.accentSoft),
+    alignment: { horizontal: "left", vertical: "center", indent: 1 },
+    border: brd(C.accent, "medium"),
+  },
+  highlightValue: {
+    font: font({ bold: true, sz: 14, color: { rgb: C.accent } }),
+    fill: fill(C.accentSoft),
+    alignment: { horizontal: "right", vertical: "center", indent: 1 },
+    numFmt: NUM_FMT,
+    border: brd(C.accent, "medium"),
+  },
+  // Summary sheet styles
+  sumHeader: {
+    font: font({ bold: true, sz: 11, color: { rgb: C.white } }),
+    fill: fill(C.mutedDark),
+    alignment: { horizontal: "center", vertical: "center", wrapText: true },
+    border: brd(C.white, "medium"),
+  },
+  sumMonth: {
+    font: font({ bold: true, sz: 11, color: { rgb: C.accent } }),
+    fill: fill(C.accentSoft),
+    alignment: { horizontal: "center", vertical: "center" },
+    border: brd(C.line),
+  },
+  sumMonthZebra: {
+    font: font({ bold: true, sz: 11, color: { rgb: C.accent } }),
+    fill: fill("FFFCE9"),
+    alignment: { horizontal: "center", vertical: "center" },
+    border: brd(C.line),
+  },
+  sumNumber: {
+    font: font({ sz: 11, color: { rgb: C.ink } }),
+    alignment: { horizontal: "right", vertical: "center", indent: 1 },
+    numFmt: NUM_FMT,
+    border: brd(C.line),
+  },
+  sumNumberZebra: {
+    font: font({ sz: 11, color: { rgb: C.ink } }),
+    fill: fill(C.zebra),
+    alignment: { horizontal: "right", vertical: "center", indent: 1 },
+    numFmt: NUM_FMT,
+    border: brd(C.line),
+  },
+};
+function sectionStyle(textColor, bgColor) {
+  return {
+    font: font({ bold: true, sz: 13, color: { rgb: textColor } }),
+    fill: fill(bgColor),
+    alignment: { horizontal: "left", vertical: "center", indent: 1 },
+    border: brd(textColor),
+  };
+}
+S.sectionIncome    = sectionStyle(C.income,    C.incomeSoft);
+S.sectionExpense   = sectionStyle(C.expense,   C.expenseSoft);
+S.sectionAsset     = sectionStyle(C.asset,     C.assetSoft);
+S.sectionLiability = sectionStyle(C.liability, C.liabilitySoft);
+
+// ---- Cell helpers ----
+function tx(v, s) { return { v: String(v == null ? "" : v), t: "s", s }; }
+function nm(v, s) { return { v: typeof v === "number" ? v : (Number(v) || 0), t: "n", s }; }
+function blank(s) { return { v: "", t: "s", s: s || {} }; }
+
+// ---- Sheet builders ----
+function buildMonthSheet(month, ownerName) {
+  const rows = [];
+  const merges = [];
+  const heights = [];
+  const N = 2;
+
+  const pushRow = (cells, h) => {
+    rows.push(cells);
+    if (h) heights[rows.length - 1] = h;
+  };
+  const mergeRow = (style, leftValue) => {
+    const arr = [tx(leftValue, style)];
+    for (let i = 1; i < N; i++) arr.push(blank(style));
+    return arr;
+  };
+  const addMerge = (r, c1, c2) => merges.push({ s: { r, c: c1 }, e: { r, c: c2 } });
+
+  // Title
+  pushRow(mergeRow(S.title, `個 人 財 務 報 表    —    ${month.label}`), 32);
+  addMerge(0, 0, N - 1);
+
+  pushRow([], 8); // spacer
+
+  // Meta
+  pushRow([tx("姓名", S.metaLabel), tx(ownerName || "", S.metaValue)], 22);
+  pushRow([tx("月份", S.metaLabel), tx(month.label || "", S.metaValue)], 22);
+
+  pushRow([], 14);
+
+  // 損益表
+  pushRow(mergeRow(S.subtitle, "　　損　益　表　　"), 26);
+  addMerge(rows.length - 1, 0, N - 1);
+
+  // 收入
+  pushRow(mergeRow(S.sectionIncome, "▌  收　入"), 22);
+  addMerge(rows.length - 1, 0, N - 1);
+  pushRow([tx("項　目", S.colHeader), tx("金　額", S.colHeader)], 20);
+  month.income.forEach((it, i) => {
+    const z = i % 2 === 1;
+    pushRow([
+      tx(it.label || "", z ? S.itemLabelZebra : S.itemLabel),
+      nm(it.value, z ? S.itemValueZebra : S.itemValue),
+    ], 18);
+  });
+  const sums = computeSums(month);
+  pushRow([tx("總　收　入", S.totalLabel), nm(sums.income, S.totalValue)], 22);
+
+  pushRow([], 8);
+
+  // 支出
+  pushRow(mergeRow(S.sectionExpense, "▌  支　出"), 22);
+  addMerge(rows.length - 1, 0, N - 1);
+  pushRow([tx("項　目", S.colHeader), tx("金　額", S.colHeader)], 20);
+  month.expense.forEach((it, i) => {
+    const z = i % 2 === 1;
+    pushRow([
+      tx(it.label || "", z ? S.itemLabelZebra : S.itemLabel),
+      nm(it.value, z ? S.itemValueZebra : S.itemValue),
+    ], 18);
+  });
+  pushRow([tx("總　支　出", S.totalLabel), nm(sums.expense, S.totalValue)], 22);
+
+  pushRow([], 8);
+
+  // 月現金流
+  pushRow([
+    tx("月現金流（總收入 − 總支出）", S.highlightLabel),
+    nm(sums.income - sums.expense, S.highlightValue),
+  ], 28);
+
+  pushRow([], 14);
+
+  // 資產負債表
+  pushRow(mergeRow(S.subtitle, "　　資　產　負　債　表　　"), 26);
+  addMerge(rows.length - 1, 0, N - 1);
+
+  // 資產
+  pushRow(mergeRow(S.sectionAsset, "▌  資　產"), 22);
+  addMerge(rows.length - 1, 0, N - 1);
+  pushRow([tx("項　目", S.colHeader), tx("金　額", S.colHeader)], 20);
+  month.asset.forEach((it, i) => {
+    const z = i % 2 === 1;
+    pushRow([
+      tx(it.label || "", z ? S.itemLabelZebra : S.itemLabel),
+      nm(it.value, z ? S.itemValueZebra : S.itemValue),
+    ], 18);
+  });
+  pushRow([tx("總　資　產", S.totalLabel), nm(sums.asset, S.totalValue)], 22);
+
+  pushRow([], 8);
+
+  // 負債
+  pushRow(mergeRow(S.sectionLiability, "▌  負　債"), 22);
+  addMerge(rows.length - 1, 0, N - 1);
+  pushRow([tx("項　目", S.colHeader), tx("金　額", S.colHeader)], 20);
+  month.liability.forEach((it, i) => {
+    const z = i % 2 === 1;
+    pushRow([
+      tx(it.label || "", z ? S.itemLabelZebra : S.itemLabel),
+      nm(it.value, z ? S.itemValueZebra : S.itemValue),
+    ], 18);
+  });
+  pushRow([tx("總　負　債", S.totalLabel), nm(sums.liability, S.totalValue)], 22);
+
+  pushRow([], 8);
+
+  pushRow([
+    tx("淨值（總資產 − 總負債）", S.highlightLabel),
+    nm(sums.asset - sums.liability, S.highlightValue),
+  ], 28);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [{ wch: 36 }, { wch: 22 }];
+  ws["!merges"] = merges;
+  ws["!rows"] = heights.map(h => h ? { hpt: h } : null);
+  return ws;
+}
+
+function buildSummarySheet() {
+  const rows = [];
+  const merges = [];
+  const heights = [];
+  const N = 7;
+
+  const pushRow = (cells, h) => {
+    rows.push(cells);
+    if (h) heights[rows.length - 1] = h;
+  };
+  const mergeRow = (style, leftValue) => {
+    const arr = [tx(leftValue, style)];
+    for (let i = 1; i < N; i++) arr.push(blank(style));
+    return arr;
+  };
+  const addMerge = (r, c1, c2) => merges.push({ s: { r, c: c1 }, e: { r, c: c2 } });
+
+  // Title
+  pushRow(mergeRow(S.title, "個 人 財 務 報 表    —    月 份 彙 總"), 36);
+  addMerge(0, 0, N - 1);
+
+  pushRow([], 8);
+
+  // Meta
+  const metaRow = (label, value) => {
+    const arr = [tx(label, S.metaLabel), tx(value, S.metaValue)];
+    for (let i = 2; i < N; i++) arr.push(blank(S.metaValue));
+    return arr;
+  };
+  pushRow(metaRow("姓名", state.meta.name || ""), 22);
+  addMerge(rows.length - 1, 1, N - 1);
+  pushRow(metaRow("月份數", String(state.months.length)), 22);
+  addMerge(rows.length - 1, 1, N - 1);
+
+  pushRow([], 14);
+
+  // Headers
+  pushRow([
+    tx("月份",     S.sumHeader),
+    tx("總收入",   S.sumHeader),
+    tx("總支出",   S.sumHeader),
+    tx("月現金流", S.sumHeader),
+    tx("總資產",   S.sumHeader),
+    tx("總負債",   S.sumHeader),
+    tx("淨值",     S.sumHeader),
+  ], 26);
+
+  state.months.forEach((m, idx) => {
+    const s = computeSums(m);
+    const z = idx % 2 === 1;
+    pushRow([
+      tx(m.label || "", z ? S.sumMonthZebra : S.sumMonth),
+      nm(s.income,                          z ? S.sumNumberZebra : S.sumNumber),
+      nm(s.expense,                         z ? S.sumNumberZebra : S.sumNumber),
+      nm(s.income - s.expense,              z ? S.sumNumberZebra : S.sumNumber),
+      nm(s.asset,                           z ? S.sumNumberZebra : S.sumNumber),
+      nm(s.liability,                       z ? S.sumNumberZebra : S.sumNumber),
+      nm(s.asset - s.liability,             z ? S.sumNumberZebra : S.sumNumber),
+    ], 22);
+  });
+
+  if (state.months.length >= 2) {
+    pushRow([], 14);
+    pushRow(mergeRow(S.subtitle, "逐 月 變 化（與上一月相比）"), 26);
+    addMerge(rows.length - 1, 0, N - 1);
+
+    pushRow([
+      tx("月份",      S.sumHeader),
+      tx("Δ 總收入",   S.sumHeader),
+      tx("Δ 總支出",   S.sumHeader),
+      tx("Δ 月現金流", S.sumHeader),
+      tx("Δ 總資產",   S.sumHeader),
+      tx("Δ 總負債",   S.sumHeader),
+      tx("Δ 淨值",     S.sumHeader),
+    ], 26);
+
+    let prev = null;
+    state.months.forEach((m, idx) => {
+      const s = computeSums(m);
+      const z = idx % 2 === 1;
+      const ms = z ? S.sumMonthZebra : S.sumMonth;
+      const ns = z ? S.sumNumberZebra : S.sumNumber;
+      if (prev) {
+        pushRow([
+          tx(m.label || "", ms),
+          nm(s.income - prev.income,                                         ns),
+          nm(s.expense - prev.expense,                                       ns),
+          nm((s.income - s.expense) - (prev.income - prev.expense),          ns),
+          nm(s.asset - prev.asset,                                           ns),
+          nm(s.liability - prev.liability,                                   ns),
+          nm((s.asset - s.liability) - (prev.asset - prev.liability),        ns),
+        ], 22);
+      } else {
+        pushRow([
+          tx(m.label || "", ms),
+          tx("—", ns), tx("—", ns), tx("—", ns), tx("—", ns), tx("—", ns), tx("—", ns),
+        ], 22);
+      }
+      prev = s;
+    });
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [
+    { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+    { wch: 14 }, { wch: 14 }, { wch: 14 },
+  ];
+  ws["!merges"] = merges;
+  ws["!rows"] = heights.map(h => h ? { hpt: h } : null);
+  return ws;
+}
+
+$("#btnExportXlsx").addEventListener("click", () => {
+  const wb = XLSX.utils.book_new();
+  wb.Props = {
+    Title: "個人財務報表",
+    Subject: "Monthly personal finance report",
+    Author: state.meta.name || "",
+    CreatedDate: new Date(),
+  };
+  const usedSheetNames = new Set();
+
+  XLSX.utils.book_append_sheet(wb, buildSummarySheet(), sanitizeSheetName("月份彙總", usedSheetNames));
+  state.months.forEach(m => {
+    XLSX.utils.book_append_sheet(wb, buildMonthSheet(m, state.meta.name), sanitizeSheetName(m.label, usedSheetNames));
+  });
+
+  const name = safeName(state.meta.name);
+  XLSX.writeFile(wb, `個人財務_${name}_${state.months.length}月.xlsx`);
+});
+
+// ---------- Drag & drop reorder ----------
+let dragSrc = null; // { section, idx, rowEl }
+
+document.addEventListener("mousedown", e => {
+  const handle = e.target.closest(".handle");
+  if (!handle) return;
+  const row = handle.closest(".row");
+  if (row) row.draggable = true;
+});
+
+// Cancel draggable when mouseup happens without a drag (e.g. just clicked the handle)
+document.addEventListener("mouseup", e => {
+  if (dragSrc) return;
+  $$(".row[draggable='true']").forEach(r => r.draggable = false);
+});
+
+document.addEventListener("dragstart", e => {
+  const row = e.target.closest(".row");
+  if (!row || !row.draggable) { e.preventDefault(); return; }
+  dragSrc = {
+    section: row.dataset.section,
+    idx: parseInt(row.dataset.idx, 10),
+    rowEl: row,
+  };
+  row.classList.add("dragging");
+  // Required for Firefox to actually start the drag
+  e.dataTransfer.effectAllowed = "move";
+  try { e.dataTransfer.setData("text/plain", "row"); } catch (_) {}
+});
+
+document.addEventListener("dragover", e => {
+  if (!dragSrc) return;
+  const row = e.target.closest(".row");
+  if (!row) return;
+  // Only allow reordering within the same section
+  if (row.dataset.section !== dragSrc.section) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  // Clear previous indicators in this list
+  const list = row.parentElement;
+  list.querySelectorAll(".row.drop-above, .row.drop-below").forEach(r => {
+    r.classList.remove("drop-above", "drop-below");
+  });
+  if (row === dragSrc.rowEl) return;
+  const rect = row.getBoundingClientRect();
+  const before = (e.clientY - rect.top) < rect.height / 2;
+  row.classList.add(before ? "drop-above" : "drop-below");
+});
+
+document.addEventListener("dragleave", e => {
+  const row = e.target.closest(".row");
+  if (row) row.classList.remove("drop-above", "drop-below");
+});
+
+document.addEventListener("drop", e => {
+  if (!dragSrc) return;
+  const row = e.target.closest(".row");
+  if (!row || row.dataset.section !== dragSrc.section) return;
+  e.preventDefault();
+  const rect = row.getBoundingClientRect();
+  const before = (e.clientY - rect.top) < rect.height / 2;
+  const targetIdx = parseInt(row.dataset.idx, 10);
+  const section = dragSrc.section;
+  const fromIdx = dragSrc.idx;
+
+  if (targetIdx === fromIdx) return;
+
+  const m = currentMonth();
+  const [moved] = m[section].splice(fromIdx, 1);
+  let insertAt = targetIdx + (before ? 0 : 1);
+  if (fromIdx < targetIdx) insertAt -= 1; // shift due to removal
+  insertAt = Math.max(0, Math.min(insertAt, m[section].length));
+  m[section].splice(insertAt, 0, moved);
+
+  renderSection(section);
+  recalc();
+  scheduleSave();
+});
+
+document.addEventListener("dragend", e => {
+  $$(".row.dragging").forEach(r => r.classList.remove("dragging"));
+  $$(".row.drop-above, .row.drop-below").forEach(r => r.classList.remove("drop-above", "drop-below"));
+  $$(".row[draggable='true']").forEach(r => r.draggable = false);
+  dragSrc = null;
+});
+
+// ---------- Month tabs: actions ----------
+function nextMonthLabel(label) {
+  const m = String(label || "").match(/^(\d{4})-(\d{1,2})$/);
+  let base;
+  if (m) {
+    let year = parseInt(m[1], 10);
+    let month = parseInt(m[2], 10) + 1;
+    if (month > 12) { month = 1; year++; }
+    base = year + "-" + String(month).padStart(2, "0");
+  } else if (label) {
+    base = label + " 副本";
+  } else {
+    base = todayYYYYMM();
+  }
+  let candidate = base;
+  let i = 2;
+  while (state.months.some(mm => mm.label === candidate)) {
+    candidate = base + " (" + i + ")";
+    i++;
+  }
+  return candidate;
+}
+
+function addMonth() {
+  const cur = currentMonth();
+  // Copy item labels from current month, reset values to empty.
+  // (If there's no current month, fall back to default template.)
+  const copyLabels = (arr) => arr.map(it => ({ label: it.label, value: "" }));
+  const m = cur ? {
+    id: makeId(),
+    label: nextMonthLabel(cur.label),
+    income:    copyLabels(cur.income),
+    expense:   copyLabels(cur.expense),
+    asset:     copyLabels(cur.asset),
+    liability: copyLabels(cur.liability),
+  } : freshMonth();
+  state.months.push(m);
+  state.activeMonthId = m.id;
+  renderTabs();
+  renderAll();
+  scheduleSave();
+}
+
+function deleteMonth(id) {
+  if (state.months.length <= 1) {
+    alert("至少需要保留一個月份。");
+    return;
+  }
+  const idx = state.months.findIndex(mm => mm.id === id);
+  if (idx < 0) return;
+  const month = state.months[idx];
+  if (!confirm(`確定要刪除「${month.label}」這個月份的所有資料嗎？此動作無法復原。`)) return;
+  state.months.splice(idx, 1);
+  if (state.activeMonthId === id) {
+    state.activeMonthId = state.months[Math.max(0, idx - 1)].id;
+  }
+  renderTabs();
+  renderAll();
+  scheduleSave();
+}
+
+function switchMonth(id) {
+  if (state.activeMonthId === id) return;
+  state.activeMonthId = id;
+  // Update active class in place (don't re-render tabs)
+  // so dblclick-to-rename works after a click-to-switch.
+  $$("#tabs .tab").forEach(t => t.classList.toggle("active", t.dataset.id === id));
+  renderAll();
+  scheduleSave();
+}
+
+function startRename(tabEl) {
+  const id = tabEl.dataset.id;
+  const month = state.months.find(mm => mm.id === id);
+  if (!month) return;
+  const labelEl = tabEl.querySelector(".tab-label");
+  if (!labelEl) return;
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "tab-label-input";
+  input.value = month.label;
+  labelEl.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = (commit) => {
+    if (done) return; done = true;
+    if (commit) {
+      const v = input.value.trim();
+      if (v) month.label = v;
+      scheduleSave();
+    }
+    renderTabs();
+    renderAll(); // update banner if active month was renamed
+  };
+  input.addEventListener("blur", () => finish(true));
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); finish(true); }
+    else if (e.key === "Escape") { e.preventDefault(); finish(false); }
+  });
+}
+
+// Click handler for tabs container
+document.addEventListener("click", e => {
+  if (e.target.closest("#tabAdd")) {
+    addMonth();
+    return;
+  }
+  const delBtn = e.target.closest(".tab .tab-del");
+  if (delBtn) {
+    e.stopPropagation();
+    const tab = delBtn.closest(".tab");
+    if (tab) deleteMonth(tab.dataset.id);
+    return;
+  }
+  const tab = e.target.closest("#tabs .tab");
+  if (tab) switchMonth(tab.dataset.id);
+});
+
+document.addEventListener("dblclick", e => {
+  const tab = e.target.closest("#tabs .tab");
+  if (tab) startRename(tab);
+});
+
+// ---------- Init ----------
+loadFromStorage();
+if (!state.months || state.months.length === 0) state = freshState();
+renderTabs();
+renderAll();
+</script>
+</body>
+</html>
